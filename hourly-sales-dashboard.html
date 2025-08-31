@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TNF Store Operations Dashboard</title>
+
+  <!-- Vendor libs -->
+  <script defer src="./vendor/chart.umd.min.js"></script>
+  <script defer src="./vendor/chartjs-plugin-annotation.min.js"></script>
+  <script defer src="./vendor/xlsx.full.min.js"></script>
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="./hourly-sales-dashboard.css" />
+</head>
+<body>
+  <!-- Streamlined Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand" aria-label="The North Face">
+        <img src="./images/TNF-Logo.png" alt="TNF" />
+      </div>
+      <div class="title">
+        <h1>Store Operations Dashboard</h1>
+        <small class="store-info">Woodburn Outlets #0074 • <span id="currentDate"></span></small>
+      </div>
+    </div>
+
+    <div class="actions">
+      <!-- Data dropdown -->
+      <div class="dropdown">
+        <button class="dropdown-toggle" id="dataMenuBtn" aria-haspopup="true" aria-expanded="false">
+          📊 Data <span class="chevron">▾</span>
+        </button>
+        <div class="dropdown-menu" id="dataMenu" role="menu">
+          <button id="downloadTemplate" role="menuitem">Download Template</button>
+          <button id="loadDemo" role="menuitem">Load Demo Data</button>
+          <div class="dropdown-divider"></div>
+          <button id="exportPng" role="menuitem">Export as PNG</button>
+          <button id="exportPdf" role="menuitem">Export as PDF</button>
+          <button id="printBtn" role="menuitem">Print Report</button>
+        </div>
+      </div>
+
+      <!-- Settings dropdown -->
+      <div class="dropdown">
+        <button class="dropdown-toggle" id="settingsMenuBtn" aria-haspopup="true" aria-expanded="false">
+          ⚙️ Settings <span class="chevron">▾</span>
+        </button>
+        <div class="dropdown-menu" id="settingsMenu" role="menu">
+          <button id="storeHoursBtn" role="menuitem">Store Hours</button>
+          <button id="authUsersBtn" role="menuitem">Authorized Users</button>
+          <button id="viewSettings" role="menuitem">View Settings</button>
+          <div class="dropdown-divider"></div>
+          <button id="resetLayout" role="menuitem">Reset Layout</button>
+          <button id="clearAllData" role="menuitem">Clear All Data</button>
+        </div>
+      </div>
+
+      <div id="statusChip" class="status-chip ready" aria-live="polite">● Online</div>
+    </div>
+  </header>
+
+  <main class="layout-2col">
+    <!-- Enhanced Sidebar with KPIs on top -->
+    <aside class="sidebar" id="sidebar">
+      <!-- KPI Section - Top Priority -->
+      <section class="kpi-highlight-section">
+        <div class="kpi-header">
+          <h3 class="section-title">Key Performance Indicators</h3>
+          <button class="refresh-btn" id="refreshKPIs" title="Refresh">↻</button>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card primary-kpi">
+            <div class="kpi-label">DAY SALES</div>
+            <div class="kpi-value" id="kpi_day_sales">$0</div>
+            <div class="kpi-delta" id="kpi_day_delta">vs target</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">VS LAST YEAR</div>
+            <div class="kpi-value" id="kpi_vs_ly">$0</div>
+            <div class="kpi-delta" id="kpi_ly_delta">change</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">CONVERSION</div>
+            <div class="kpi-value" id="kpi_conv">0%</div>
+            <div class="kpi-delta" id="kpi_conv_delta">visitors</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">ADS / UPT</div>
+            <div class="kpi-value" id="kpi_efficiency">$0 / 0</div>
+            <div class="kpi-delta" id="kpi_eff_delta">efficiency</div>
+          </div>
+        </div>
+      </section>
+
+      <div id="colResizer" title="Drag to resize sidebar"></div>
+
+      <div class="sidebar-content">
+        <!-- Data Import Section -->
+        <section class="input-tile" id="tile-import">
+          <h3 class="tile-h">Data Import</h3>
+          <div class="drop-zone" id="dropExcel" tabindex="0">
+            <div class="drop-icon">📁</div>
+            <div class="drop-text">
+              <strong>Drop Excel File</strong>
+              <div class="muted">or click to browse</div>
+            </div>
+          </div>
+          <input type="file" id="fileUpload" accept=".xlsx,.xls" hidden />
+        </section>
+
+        <!-- Saved Library -->
+        <section class="input-tile" id="tile-library">
+          <h3 class="tile-h">Saved Library</h3>
+          <div class="lib-controls">
+            <input type="text" id="libName" placeholder="Dataset name..." class="form-control" />
+            <button id="libSaveBtn" class="btn btn-sm primary">Save</button>
+          </div>
+          <div id="libList" class="lib-list"></div>
+        </section>
+
+        <!-- Time Window & Filters -->
+        <section class="input-tile" id="tile-filters">
+          <h3 class="tile-h">Time Window & Filters</h3>
+          <div class="field-group">
+            <label>Start Hour</label>
+            <select id="selStart" class="form-control"></select>
+          </div>
+          <div class="field-group">
+            <label>End Hour</label>
+            <select id="selEnd" class="form-control"></select>
+          </div>
+          <div class="field-group">
+            <label>Min Transactions/hr</label>
+            <input type="number" id="minTxn" class="form-control" value="0" min="0" />
+          </div>
+        </section>
+
+        <!-- View Controls -->
+        <section class="input-tile" id="tile-views">
+          <h3 class="tile-h">Chart Views</h3>
+          <label class="chk"><input type="checkbox" id="viewHourly" checked /> Hourly Sales</label>
+          <label class="chk"><input type="checkbox" id="viewCume" checked /> Cumulative</label>
+          <label class="chk"><input type="checkbox" id="viewTU" checked /> Transactions & Units</label>
+          <label class="chk"><input type="checkbox" id="viewEff" checked /> Efficiency</label>
+          <label class="chk"><input type="checkbox" id="viewHeatmap" checked /> Sales Heatmap</label>
+          <label class="chk"><input type="checkbox" id="viewForecast" checked /> Forecast</label>
+          <label class="chk"><input type="checkbox" id="viewTable" checked /> Detail Table</label>
+        </section>
+      </div>
+    </aside>
+
+    <!-- Main Charts Area -->
+    <section class="plots-grid" id="plotsGrid">
+      <!-- Hourly Sales with Period Toggles -->
+      <div id="wrap-hourly" class="card-item resizable" data-size-key="plot-hourly">
+        <div class="plot-hdr">
+          <h4>Hourly Sales vs Target</h4>
+          <div class="period-toggles">
+            <button class="period-btn active" data-period="all">All</button>
+            <button class="period-btn" data-period="morning">Morning</button>
+            <button class="period-btn" data-period="noon">Noon</button>
+            <button class="period-btn" data-period="evening">Evening</button>
+          </div>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_hourly"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- Cumulative Chart -->
+      <div id="wrap-cume" class="card-item resizable" data-size-key="plot-cume">
+        <div class="plot-hdr">
+          <h4>Cumulative Performance</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_cume"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- Transactions & Units -->
+      <div id="wrap-tu" class="card-item resizable" data-size-key="plot-tu">
+        <div class="plot-hdr">
+          <h4>Transactions & Units</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_tu"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- Efficiency Metrics -->
+      <div id="wrap-eff" class="card-item resizable" data-size-key="plot-eff">
+        <div class="plot-hdr">
+          <h4>Efficiency: ADS, UPT, Conv%</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_eff"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- NEW: Sales Heatmap -->
+      <div id="wrap-heatmap" class="card-item resizable" data-size-key="plot-heatmap">
+        <div class="plot-hdr">
+          <h4>Weekly Sales Heatmap</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_heatmap"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- NEW: Sales Forecast -->
+      <div id="wrap-forecast" class="card-item resizable" data-size-key="plot-forecast">
+        <div class="plot-hdr">
+          <h4>Sales Forecast & Trend</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="plot-body"><canvas id="ch_forecast"></canvas></div>
+        <div class="resize-nub r-se"></div>
+      </div>
+
+      <!-- Detail Table -->
+      <div id="wrap-table" class="card-item wide resizable" data-size-key="panel-table">
+        <div class="plot-hdr">
+          <h4>Hourly Detail</h4>
+          <button class="reorder-btn" title="Reorder">⇅</button>
+          <button class="wide-btn" title="Toggle wide">⤢</button>
+        </div>
+        <div class="table-body">
+          <table id="tbl">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Sales</th>
+                <th>Target</th>
+                <th>Variance</th>
+                <th>Txns</th>
+                <th>Units</th>
+                <th>ADS</th>
+                <th>UPT</th>
+                <th>Conv%</th>
+                <th>Traffic</th>
+                <th>LY</th>
+                <th>Cumulative</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="resize-nub r-se"></div>
+      </div>
+    </section>
+
+    <div id="stash" hidden></div>
+  </main>
+
+  <!-- Store Hours Modal -->
+  <div class="modal" id="storeHoursModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Store Hours Configuration</h2>
+        <button class="modal-close" onclick="closeModal('storeHoursModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label>Opening Time</label>
+          <input type="time" id="openTime" class="form-control" value="10:00" />
+        </div>
+        <div class="field-group">
+          <label>Closing Time</label>
+          <input type="time" id="closeTime" class="form-control" value="21:00" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn primary" id="saveStoreHours">Save Hours</button>
+          <button class="btn" onclick="closeModal('storeHoursModal')">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authorized Users Modal -->
+  <div class="modal" id="authUsersModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Authorized Users</h2>
+        <button class="modal-close" onclick="closeModal('authUsersModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="usersList" class="users-list"></div>
+        <div class="add-user-section">
+          <h3>Add New User</h3>
+          <div class="field-group">
+            <input type="text" id="newUserName" class="form-control" placeholder="Name" />
+          </div>
+          <div class="field-group">
+            <select id="newUserRole" class="form-control">
+              <option>Store Manager</option>
+              <option>Assistant Manager</option>
+              <option>Supervisor</option>
+              <option>Sales Associate</option>
+            </select>
+          </div>
+          <button class="btn primary" id="addUserBtn">Add User</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Single app entry -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
